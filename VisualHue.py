@@ -1,8 +1,10 @@
 import urllib.request
+import LightTower
+import contextlib
 import atexit
 import time
 import re
-
+import sys
 
 pageURL = 'http://osi-cc100:9080/stats'
 pattern = '(\d*) CALLS WAITING FOR (\d*):(\d*)'  # define RegEx search pattern
@@ -10,10 +12,27 @@ searchPattern = re.compile(pattern)				# compile pattern into RegEx object
 delayTime = 1
 maxDisconnectTime = 15
 
+# List of light states
+red         = [1, 0, 0]
+redYellow   = [1, 1, 0]
+yellow      = [0, 1, 0]
+yellowGreen = [0, 1, 1]
+green       = [0, 0, 1]
+allOn       = [1, 1, 1]
+allOff      = [0, 0, 0]
+
+
+try:																	# check for DEBUG argument
+	DEBUG = sys.argv[1] == '-d'
+except IndexError:
+	DEBUG = False
+lightTower = LightTower.Tower(DEBUG)
+
 
 def MainLoop():
 	connectFailCount = 0		# create error counter
 	points = 0
+	state = allOff
 
 	while True:
 		thisTime = time.time()						# record time when entering loop
@@ -27,9 +46,11 @@ def MainLoop():
 			connectFailCount = 0
 
 		connectionFailure = connectFailCount * delayTime >= maxDisconnectTime
-		state = determineState(points, connectionFailure)
-##	push state to lights
-		fileWrite(state)
+		newState = determineState(points, connectionFailure)
+		if newState != state:
+			state = newState
+			lightTower.setState(state)
+			fileWrite(state)
 		elapsedTime = time.time() - thisTime		# check time elapsed fetching data
 		if elapsedTime > delayTime:					# proceed if fetching took longer than 5 sec
 			pass
@@ -39,18 +60,22 @@ def MainLoop():
 
 def getData(address):
 	try:
-		data = str(urllib.request.urlopen(address).read())  # fetch CISCO phone data
+		connection = urllib.request.urlopen(address)
+		data = str(connection.read())  # fetch CISCO phone data
 		connectFail = 0					# reset error counter
 		extracted = searchPattern.search(data)  # extract desired values from data
 		[calls, minutes, seconds] = [
 			extracted.group(1), extracted.group(2), extracted.group(3)]
-		print('{0:2s} calls waiting for {1:s}:{2:2s}'.format(calls, minutes, seconds))
+		if DEBUG:
+			print('{0:2s} calls waiting for {1:s}:{2:2s}'.format(calls, minutes, seconds))
 		timeSeconds = int(seconds) + int(minutes) * 60
 		return [calls, timeSeconds, connectFail]
 	except urllib.error.URLError:				# print error if network lost
 		print('CANNOT CONNECT TO CISCO PHONE STATUS PAGE')
 		connectFail = 1					# step fail counter up by 1
 		return [None, None, connectFail]
+	finally:
+		connection.close()
 
 
 def calcPoints(calls, waitTime):
@@ -61,24 +86,8 @@ def calcPoints(calls, waitTime):
 
 
 def determineState(points, connectionFailure):
-
-	# Lis of States
-	# array elements map to lights : [red, yellow, green]
-	red         = [1, 0, 0]
-	redYellow   = [1, 1, 0]
-	yellow      = [0, 1, 0]
-	yellowGreen = [0, 1, 1]
-	green       = [0, 0, 1]
-
-	allOn       = [1, 1, 1]
-	allOff      = [0, 0, 0]
-	# Aliases
-	conLost     = allOn
-	greenYellow = yellowGreen
-	yellowRed   = redYellow
-
 	if connectionFailure:
-		return conLost
+		return allOn
 	elif points == 0:
 		return green
 	elif points >= 0 and points < 4:
@@ -98,8 +107,12 @@ def fileWrite(state):
 	file.close()
 
 
-def setState(state):
-	## set the state of the lights here
+
+def resetLights():
+	lightTower.setState([0, 0, 0])
+
+
+atexit.register(resetLights)
 
 
 if __name__ == '__main__':

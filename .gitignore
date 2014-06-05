@@ -1,5 +1,7 @@
 *.docx
 old/
+VisualHueOLD.py
+VisualAlertForPi.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
