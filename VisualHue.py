@@ -1,5 +1,4 @@
 import urllib.request
-import LightTower
 import atexit
 import time
 import re
@@ -10,7 +9,6 @@ pattern = '(\d*) CALLS WAITING FOR (\d*):(\d*)'  # define RegEx search pattern
 searchPattern = re.compile(pattern)				# compile pattern into RegEx object
 delayTime = 1
 maxDisconnectTime = 15
-lightTower = LightTower.Tower()
 
 
 def MainLoop():
@@ -30,7 +28,7 @@ def MainLoop():
 
 		connectionFailure = connectFailCount * delayTime >= maxDisconnectTime
 		state = determineState(points, connectionFailure)
-		lightTower.setState(state)
+##	push state to lights
 		fileWrite(state)
 		elapsedTime = time.time() - thisTime		# check time elapsed fetching data
 		if elapsedTime > delayTime:					# proceed if fetching took longer than 5 sec
@@ -100,12 +98,8 @@ def fileWrite(state):
 	file.close()
 
 
-
-def resetLights():
-	lightTower.setState([0, 0, 0])
-
-
-atexit.register(resetLights)
+def setState(state):
+	## set the state of the lights here
 
 
 if __name__ == '__main__':
