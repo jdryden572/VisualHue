@@ -6,6 +6,7 @@ import re
 import sys
 import phue
 import json
+import requests
 
 pageURL = 'http://osi-cc100:9080/stats'
 callPattern = r'(\d*) CALLS WAITING FOR (\d*):(\d*)'  # define RegEx search pattern
@@ -21,10 +22,10 @@ redYellow   = {'on': True, 'bri': 150, 'sat': 255, 'xy': [0.6, 0.4]}
 yellow      = {'on': True, 'bri': 150, 'sat': 255, 'xy': [0.55, 0.46]}
 #yellowGreen = {'on': True, 'bri': 150, 'sat': 255, 'xy': [0.4, 0.4]}
 green       = {'on': True, 'bri': 150, 'sat': 255, 'xy': [0.5, 0.8]}
-white		= {'on': True, 'bri': 50, 'sat': 255, 'ct': 200}
+white		= {'on': True, 'bri':  50, 'sat': 255, 'ct': 200}
 allOn       = {'on': True, 'bri': 150, 'sat': 255, 'ct': 250}
-allOff      = {'on': False}
 noConnect	= {'on': True, 'bri': 150, 'sat': 255, 'effect': 'colorloop'}
+allOff      = {'on': False}
 
 userName = 'ositechsupport'
 
@@ -123,6 +124,19 @@ def fileWrite(state):
 	file.write(text)
 	file.close()
 
+	
+def getNewLights(IP):
+	"""
+	New lights need to be found manually, because this feature appears to be
+	unsupported by the phue module. This will instruct the bridge to search for 
+	and add any new hue lights. Searching continues for 1 minute and is only capable 
+	of locating up to 15 new lights. To add additional lights, the command must be
+	run again.
+	"""
+	connection = requests.post('http://' + IP + '/api/' + userName + '/lights')
+	if DEBUG: print(connection.text)
+	connection.close()
+	
 
 def resetLights():
 	setState(allOff)
@@ -134,4 +148,5 @@ atexit.register(resetLights)
 if __name__ == '__main__':
 	hue = phue.Bridge(ip = getBridgeIP(), username = userName)
 	setState(allOn)
+	getNewLights(getBridgeIP())
 	MainLoop()
