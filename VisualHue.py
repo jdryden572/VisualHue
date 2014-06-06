@@ -8,27 +8,30 @@ import phue
 import json
 
 pageURL = 'http://osi-cc100:9080/stats'
-pattern = '(\d*) CALLS WAITING FOR (\d*):(\d*)'  # define RegEx search pattern
-searchPattern = re.compile(pattern)				# compile pattern into RegEx object
+callPattern = r'(\d*) CALLS WAITING FOR (\d*):(\d*)'  # define RegEx search pattern
+callPatternComp = re.compile(callPattern)				# compile pattern into RegEx object
+ipPattern = r'(\d+\.\d+\.\d+\.\d+)'
+ipPatternComp = re.compile(ipPattern)	
 delayTime = 1
 maxDisconnectTime = 15
 
 # List of light states
-red         = ['xy', [  0, 0.8]]
-redYellow   = ['xy', [  0, 0.2]]
-yellow      = ['xy', [  0, 0.4]]
-yellowGreen = ['xy', [0.4, 0.4]]
-green       = ['xy', [0.6, 0.6]]
-allOn       = ['on', True]
-allOff      = ['on', False]
+red         = {'on': True, 'bri': 150, 'sat': 225, 'xy': [0.8, 0.3]}
+redYellow   = {'on': True, 'bri': 150, 'sat': 255, 'xy': [0.6, 0.4]}
+yellow      = {'on': True, 'bri': 150, 'sat': 255, 'xy': [0.55, 0.46]}
+#yellowGreen = {'on': True, 'bri': 150, 'sat': 255, 'xy': [0.4, 0.4]}
+green       = {'on': True, 'bri': 150, 'sat': 255, 'xy': [0.5, 0.8]}
+white		= {'on': True, 'bri': 50, 'sat': 255, 'ct': 200}
+allOn       = {'on': True, 'bri': 150, 'sat': 255, 'ct': 250}
+allOff      = {'on': False}
+noConnect	= {'on': True, 'bri': 150, 'sat': 255, 'effect': 'colorloop'}
 
-userName = 'newdeveloper'
+userName = 'ositechsupport'
 
 try:																	# check for DEBUG argument
 	DEBUG = sys.argv[1] == '-d'
 except IndexError:
 	DEBUG = False
-#lightTower = LightTower.Tower(DEBUG)
 
 
 def MainLoop():
@@ -61,15 +64,13 @@ def MainLoop():
 
 			
 def getBridgeIP():
-	# with urllib.request.urlopen('http://www.meethue.com/api/nupnp') as connection:
-		# data = str(connection.read())
-	# try:
-		# IP = json.loads(data).get('internalipaddress')
-	# except:
-		# print('Could not find Bridge IP address automatically')
-	# else: 
-		# return IP
-	return 'localhost:80'
+	with urllib.request.urlopen('http://www.meethue.com/api/nupnp') as connection:
+		data = str(connection.read())
+	match = ipPatternComp.search(data)
+	if match == None:
+		print('Could not find Bridge IP address automatically')
+	else: 
+		return match.group(1)
 
 	
 def getData(address):
@@ -77,7 +78,7 @@ def getData(address):
 		with urllib.request.urlopen(address, timeout = 2) as connection:
 			data = str(connection.read())  # fetch CISCO phone data
 		connectFail = 0					# reset error counter
-		extracted = searchPattern.search(data)  # extract desired values from data
+		extracted = callPatternComp.search(data)  # extract desired values from data
 		[calls, minutes, seconds] = [
 			extracted.group(1), extracted.group(2), extracted.group(3)]
 		if DEBUG:
@@ -99,11 +100,11 @@ def calcPoints(calls, waitTime):
 
 def determineState(points, connectionFailure):
 	if connectionFailure:
-		return allOn
+		return noConnect
 	elif points == 0:
-		return green
+		return white
 	elif points >= 0 and points < 4:
-		return yellowGreen
+		return green
 	elif points >= 4 and points < 7:
 		return yellow
 	elif points >= 7 and points < 9:
@@ -111,15 +112,16 @@ def determineState(points, connectionFailure):
 	elif points >= 9:
 		return red
 
+		
 def setState(state):
-	hue.set_group(0, state[0], state[1])
+		hue.set_group(0, state)
 
+	
 def fileWrite(state):
 	text = str(time.time()) + ' ' + str(state)
 	file = open('../webServer/currentLightState.txt', 'w')
 	file.write(text)
 	file.close()
-
 
 
 def resetLights():
