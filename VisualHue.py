@@ -1,62 +1,86 @@
+"""
+VisualHue
+
+Brett Nelson and James Dryden
+OSIsoft, LLC
+
+An implementation of Philips Hue as a status indicator.
+
+"Hue Personal Wireless Lighting" is a trademark owned by 
+Koninklijke Philips Electronics N.V.
+See www.meethue.com for more information.
+"""
+
 import urllib.request
-import contextlib
 import atexit
 import time
 import re
 import sys
-import phue
 import json
-import requests
-
+import warnings
+try:
+	import requests
+except:
+	warnings.warn('The requests module must be installed. Try "pip install requests"')
+	exit()
+try: 
+	import phue
+except:
+	warnings.warn('The phue module must be installed. Visit https://github.com/studioimaginaire/phue')
+	exit()
+	
 pageURL = 'http://osi-cc100:9080/stats'
 callPattern = r'(\d*) CALLS WAITING FOR (\d*):(\d*)'  # define RegEx search pattern
-callPatternComp = re.compile(callPattern)				# compile pattern into RegEx object
+callPatternCompiled = re.compile(callPattern)				# compile pattern into RegEx object
 ipPattern = r'(\d+\.\d+\.\d+\.\d+)'
-ipPatternComp = re.compile(ipPattern)	
+ipPatternCompiled = re.compile(ipPattern)	
 delayTime = 1
 maxDisconnectTime = 15
+manualBridgeIP = None
 
 # List of light states
-red         = {'on': True, 'bri': 150, 'sat': 225, 'xy': [0.8, 0.3]}
-redYellow   = {'on': True, 'bri': 150, 'sat': 255, 'xy': [0.6, 0.4]}
-yellow      = {'on': True, 'bri': 150, 'sat': 255, 'xy': [0.55, 0.46]}
+red         = {'on': True, 'bri': 150, 'sat': 225, 'transitiontime': 4, 'xy': [0.8, 0.3]}
+redYellow   = {'on': True, 'bri': 150, 'sat': 255, 'transitiontime': 4, 'xy': [0.6, 0.4]}
+yellow      = {'on': True, 'bri': 150, 'sat': 255, 'transitiontime': 4, 'xy': [0.55, 0.46]}
 #yellowGreen = {'on': True, 'bri': 150, 'sat': 255, 'xy': [0.4, 0.4]}
-green       = {'on': True, 'bri': 150, 'sat': 255, 'xy': [0.5, 0.8]}
-white		= {'on': True, 'bri':  50, 'sat': 255, 'ct': 200}
-allOn       = {'on': True, 'bri': 150, 'sat': 255, 'ct': 250}
-noConnect	= {'on': True, 'bri': 150, 'sat': 255, 'effect': 'colorloop'}
+green       = {'on': True, 'bri': 150, 'sat': 255, 'transitiontime': 4, 'xy': [0.5, 0.8]}
+white		= {'on': True, 'bri':  50, 'sat': 255, 'transitiontime': 4, 'ct': 200}
+allOn       = {'on': True, 'bri':  50, 'sat': 255, 'transitiontime': 1, 'ct': 250}
+noConnect	= {'on': True, 'bri': 150, 'sat': 255, 'transitiontime': 4, 'effect': 'colorloop'}
 allOff      = {'on': False}
 
 userName = 'ositechsupport'
 
-try:																	# check for DEBUG argument
+try:													
 	DEBUG = sys.argv[1] == '-d'
 except IndexError:
 	DEBUG = False
 
 
 def MainLoop():
-	connectFailCount = 0		# create error counter
+	"""Loops forever to continually run the program."""
+	connectFailCount = 0	
 	points = 0
 	state = allOff
 
 	while True:
 		thisTime = time.time()						# record time when entering loop
-		[newCallsWaiting, newTimeSeconds, connectFail] = getData(pageURL)
-		if connectFail:
-			connectFailCount += 1
-		else:
-			callsWaiting = newCallsWaiting
-			timeSeconds = newTimeSeconds
-			points = calcPoints(int(callsWaiting), timeSeconds)
-			connectFailCount = 0
+		if isOperatingHours():	
+			[newCallsWaiting, newTimeSeconds, connectFail] = getPhoneData(pageURL)
+			if connectFail:
+				connectFailCount += 1
+			else:
+				callsWaiting = newCallsWaiting
+				timeSeconds = newTimeSeconds
+				points = calcPoints(int(callsWaiting), timeSeconds)
+				connectFailCount = 0
 
-		connectionFailure = connectFailCount * delayTime >= maxDisconnectTime
-		newState = determineState(points, connectionFailure)
-		if newState != state:
-			state = newState
-			setState(state)
-#			fileWrite(state)	#out for now
+			connectionFailure = connectFailCount * delayTime >= maxDisconnectTime
+			newState = determineState(points, connectionFailure)
+			if newState != state:
+				state = newState
+				setState(state)
+	#			fileWrite(state)	#out for now
 		elapsedTime = time.time() - thisTime		# check time elapsed fetching data
 		if elapsedTime > delayTime:					# proceed if fetching took longer than 5 sec
 			pass
@@ -65,21 +89,30 @@ def MainLoop():
 
 			
 def getBridgeIP():
+	"""Finds Hue Bridge IP address using http://www.meethue.com/api/nupnp. 
+	Returns a string containing the IP address, or None if unable to locate 
+	an address.
+	"""
 	with urllib.request.urlopen('http://www.meethue.com/api/nupnp') as connection:
 		data = str(connection.read())
-	match = ipPatternComp.search(data)
-	if match == None:
+	match = ipPatternCompiled.search(data)
+	if match is None:
 		print('Could not find Bridge IP address automatically')
+		return None
 	else: 
 		return match.group(1)
 
+
+def getPhoneData(address):
+	"""Get the state of the Cisco phone system, at given address.
 	
-def getData(address):
+	Returns [calls, timeSeconds, connectFail]. 
+	"""
 	try:
 		with urllib.request.urlopen(address, timeout = 2) as connection:
 			data = str(connection.read())  # fetch CISCO phone data
 		connectFail = 0					# reset error counter
-		extracted = callPatternComp.search(data)  # extract desired values from data
+		extracted = callPatternCompiled.search(data)  # extract desired values from data
 		[calls, minutes, seconds] = [
 			extracted.group(1), extracted.group(2), extracted.group(3)]
 		if DEBUG:
@@ -93,6 +126,9 @@ def getData(address):
 
 
 def calcPoints(calls, waitTime):
+	"""Determine call system priority points based on # of calls waiting
+	and wait time of longest waiting call.
+	"""
 	callPoints = calls
 	timePoints = waitTime // 60
 	points = callPoints + timePoints
@@ -100,6 +136,9 @@ def calcPoints(calls, waitTime):
 
 
 def determineState(points, connectionFailure):
+	"""Choose the Hue light state based on the point count and whether the 
+	connection has been lost.
+	"""
 	if connectionFailure:
 		return noConnect
 	elif points == 0:
@@ -115,10 +154,12 @@ def determineState(points, connectionFailure):
 
 		
 def setState(state):
-		hue.set_group(0, state)
+	"""Set the state of the Hue lights."""
+	hue.set_group(0, state)
 
 	
 def fileWrite(state):
+	"""Write the current light state to a .txt file."""
 	text = str(time.time()) + ' ' + str(state)
 	file = open('../webServer/currentLightState.txt', 'w')
 	file.write(text)
@@ -126,27 +167,56 @@ def fileWrite(state):
 
 	
 def getNewLights(IP):
-	"""
-	New lights need to be found manually, because this feature appears to be
-	unsupported by the phue module. This will instruct the bridge to search for 
-	and add any new hue lights. Searching continues for 1 minute and is only capable 
-	of locating up to 15 new lights. To add additional lights, the command must be
-	run again.
+	"""Instructs the Hue Bridge to search for new Hue lights.
+	
+	The 'find new lights' function needs to be called manually, 
+	because this feature appears to be unsupported by the phue module. 
+	This will instruct the bridge to search for and add any new hue lights. 
+	Searching continues for 1 minute and is only capable of locating up 
+	to 15 new lights. To add additional lights, the command must be run again.
 	"""
 	connection = requests.post('http://' + IP + '/api/' + userName + '/lights')
 	if DEBUG: print(connection.text)
 	connection.close()
 	
 
+def isOperatingHours():
+	"""Determines whether the the time is currently during office hours.
+	
+	Returns boolean True or False.
+	"""
+	isWeekday 		= (0 <= time.localtime()[6] <=  4)	# checks if today is a weekday
+	isOfficeHours 	= (7 <= time.localtime()[3] <= 18)	# checks if currently during office hours
+	return (isWeekday and isOfficeHours)
+
+	
 def resetLights():
+	"""Defines action to be taken to reset the Hue lights."""
 	setState(allOff)
 
 
-atexit.register(resetLights)
-
-
 if __name__ == '__main__':
-	hue = phue.Bridge(ip = getBridgeIP(), username = userName)
+	# First try to connect to Hue Bridge automatically. If this fails, attempt
+	# to connect with the manualBridgeIP. Exit if both fail.
+	IP = getBridgeIP()
+	try:
+		hue = phue.Bridge(ip = IP, username = userName)
+	except:
+		print('Failed to automatically connect to Hue Bridge.')
+		print('Attempting to use manual IP.')
+		IP = manualBridgeIP
+		try: 
+			hue = phue.Bridge(ip = IP, username = userName)
+		except:
+			print('Manual IP failed. Make sure initial Bridge configuration is complete.')
+			print('Exiting.')
+			exit()
+	
+	# Create the Bridge instance, set the lights to allOn, instruct Bridge
+	# to check for new Hue lights, register exit action (turns off lights) 
+	# and run the main loop.
+	hue = phue.Bridge(ip = IP, username = userName)
 	setState(allOn)
-	getNewLights(getBridgeIP())
+	getNewLights(IP)
+	atexit.register(resetLights)
 	MainLoop()
