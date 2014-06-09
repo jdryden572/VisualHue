@@ -42,10 +42,9 @@ manualBridgeIP = None
 red         = {'on': True, 'bri': 150, 'sat': 225, 'transitiontime': 4, 'xy': [0.8, 0.3]}
 redYellow   = {'on': True, 'bri': 150, 'sat': 255, 'transitiontime': 4, 'xy': [0.6, 0.4]}
 yellow      = {'on': True, 'bri': 150, 'sat': 255, 'transitiontime': 4, 'xy': [0.55, 0.46]}
-#yellowGreen = {'on': True, 'bri': 150, 'sat': 255, 'xy': [0.4, 0.4]}
 green       = {'on': True, 'bri': 150, 'sat': 255, 'transitiontime': 4, 'xy': [0.5, 0.8]}
-white		= {'on': True, 'bri':  50, 'sat': 255, 'transitiontime': 4, 'ct': 200}
-allOn       = {'on': True, 'bri':  50, 'sat': 255, 'transitiontime': 1, 'ct': 250}
+white		= {'on': True, 'bri':  50, 'sat': 255, 'transitiontime': 0, 'ct': 200}
+allOn       = {'on': True, 'bri':  50, 'sat': 255, 'transitiontime': 0, 'ct': 250}
 noConnect	= {'on': True, 'bri': 150, 'sat': 255, 'transitiontime': 4, 'effect': 'colorloop'}
 allOff      = {'on': False}
 
@@ -155,7 +154,10 @@ def determineState(points, connectionFailure):
 		
 def setState(state):
 	"""Set the state of the Hue lights."""
-	hue.set_group(0, state)
+	try:
+		hue.set_group(0, state)
+	except:
+		print('Could not connect to Hue Bridge. Check network connections.')
 
 	
 def fileWrite(state):
