@@ -2,6 +2,11 @@
 old/
 VisualHueOLD.py
 VisualAlertForPi.py
+feettometers.py
+light-bulb-regular.gif
+GUI.py
+GUIclass.py
+dumb.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

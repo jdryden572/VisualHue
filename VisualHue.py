@@ -1,5 +1,5 @@
 """
-VisualHue
+visualhue
 
 Brett Nelson and James Dryden
 OSIsoft, LLC
@@ -7,8 +7,7 @@ OSIsoft, LLC
 An implementation of Philips Hue as a status indicator.
 
 "Hue Personal Wireless Lighting" is a trademark owned by 
-Koninklijke Philips Electronics N.V.
-See www.meethue.com for more information.
+Philips Electronics N.V. See www.meethue.com for more information.
 """
 
 # These variables may be adjusted as desired
@@ -24,12 +23,12 @@ userName = 'ositechsupport'
 # List of light states. The parameters for each state may be changed if
 # desired. If the state names are changed, the "determineState" function 
 # must be changed!
-red         = {'on': True, 'bri': 150, 'sat': 225, 'transitiontime': 4, 'xy': [0.8, 0.3]}
+red         = {'on': True, 'bri': 150, 'sat': 255, 'transitiontime': 4, 'xy': [0.8, 0.3]}
 redYellow   = {'on': True, 'bri': 150, 'sat': 255, 'transitiontime': 4, 'xy': [0.6, 0.4]}
 yellow      = {'on': True, 'bri': 150, 'sat': 255, 'transitiontime': 4, 'xy': [0.55, 0.46]}
-green       = {'on': True, 'bri': 150, 'sat': 255, 'transitiontime': 4, 'xy': [0.5, 0.8]}
-white		= {'on': True, 'bri':  50, 'sat': 255, 'transitiontime': 0, 'ct': 200}
-allOn       = {'on': True, 'bri':  50, 'sat': 255, 'transitiontime': 0, 'ct': 250}
+green       = {'on': True, 'bri': 100, 'sat': 255, 'transitiontime': 4, 'xy': [0.5, 0.8]}
+white		= {'on': True, 'bri':  50, 'sat': 255, 'transitiontime': 2, 'ct': 200}
+allOn       = {'on': True, 'bri':  50, 'sat': 255, 'transitiontime': 2, 'ct': 250}
 noConnect	= {'on': True, 'bri': 150, 'sat': 255, 'transitiontime': 4, 'effect': 'colorloop'}
 allOff      = {'on': False}
 
@@ -59,10 +58,11 @@ ipPattern = r'(\d+\.\d+\.\d+\.\d+)'
 ipPatternCompiled = re.compile(ipPattern)	
 
 
-try:													
-	DEBUG = sys.argv[1] == '-d'
-except IndexError:
-	DEBUG = False
+DEBUG = True
+# try:													
+	# DEBUG = sys.argv[1] == '-d'
+# except IndexError:
+	# DEBUG = False
 
 
 def MainLoop():
@@ -88,7 +88,11 @@ def MainLoop():
 			if newState != state:
 				state = newState
 				setState(state)
-	#			fileWrite(state)	#out for now
+#				fileWrite(points)	#out for now
+		else:
+			if DEBUG: print('Not during office hours. Lights off.')
+			setState(allOff)
+			time.sleep(10)
 		elapsedTime = time.time() - thisTime		# check time elapsed fetching data
 		if elapsedTime > delayTime:					# proceed if fetching took longer than 5 sec
 			pass
@@ -169,9 +173,9 @@ def setState(state):
 		print('Could not connect to Hue Bridge. Check network connections.')
 
 	
-def fileWrite(state):
-	"""Write the current light state to a .txt file."""
-	text = str(time.time()) + ' ' + str(state)
+def fileWrite(points):
+	"""Write the current priority points to a .txt file."""
+	text = str(time.time()) + ' points: ' + str(points)
 	file = open('../webServer/currentLightState.txt', 'w')
 	file.write(text)
 	file.close()
@@ -197,20 +201,21 @@ def isOperatingHours():
 	Returns boolean True or False.
 	"""
 	isWeekday 		= (0 <= time.localtime()[6] <=  4)	# checks if today is a weekday
-	isOfficeHours 	= (7 <= time.localtime()[3] <= 18)	# checks if currently during office hours
+	isOfficeHours 	= (7 <= time.localtime()[3] <= 17)	# checks if currently during office hours
 	return (isWeekday and isOfficeHours)
+
 
 	
 def resetLights():
 	"""Defines action to be taken to reset the Hue lights."""
 	setState(allOff)
 
-
-if __name__ == '__main__':
+def runProgram():
 	# First try to connect to Hue Bridge automatically. If this fails, attempt
 	# to connect with the manualBridgeIP. Exit if both fail.
 	IP = getBridgeIP()
 	try:
+		global hue
 		hue = phue.Bridge(ip = IP, username = userName)
 	except:
 		print('Failed to automatically connect to Hue Bridge.')
@@ -231,3 +236,6 @@ if __name__ == '__main__':
 	getNewLights(IP)
 	atexit.register(resetLights)
 	MainLoop()
+	
+if __name__ == '__main__':
+	runProgram()
