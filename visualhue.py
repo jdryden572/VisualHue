@@ -10,11 +10,13 @@ An implementation of Philips Hue as a status indicator.
 Philips Electronics N.V. See www.meethue.com for more information.
 """
 
+defaultConfig = """'''Configuration file for visualhue'''
+
 # These variables may be adjusted as desired
 delayTime = 1					# Seconds between polling the phone status
 maxDisconnectTime = 15			# Disconnected time before triggering "noConnect"
 
-# Change "manualBridgeIP" if Hue bridge IP is known but cannot be found 
+# Change "config.manualBridgeIP" if Hue bridge IP is known but cannot be found 
 # automatically. Variable "userName" must match the username registered 
 # on the the Hue Bridge.
 manualBridgeIP = None
@@ -31,7 +33,7 @@ white		= {'on': True, 'bri':  50, 'sat': 255, 'transitiontime': 2, 'ct': 200}
 allOn       = {'on': True, 'bri':  50, 'sat': 255, 'transitiontime': 2, 'ct': 250}
 noConnect	= {'on': True, 'bri': 150, 'sat': 255, 'transitiontime': 4, 'effect': 'colorloop'}
 allOff      = {'on': False}
-
+"""
 
 import urllib.request
 import atexit
@@ -50,6 +52,13 @@ try:
 except:
 	warnings.warn('The phue module must be installed. Visit https://github.com/studioimaginaire/phue')
 	exit()
+try:
+	import config
+except:
+	warnings.warn('Config file could not be found. Creating default config file, config.py')
+	with open('config.py', 'w') as f:
+		f.write(defaultConfig)
+	import config
 	
 pageURL = 'http://osi-cc100:9080/stats'
 callPattern = r'(\d*) CALLS WAITING FOR (\d*):(\d*)'  # define RegEx search pattern
@@ -69,7 +78,7 @@ def MainLoop():
 	"""Loops forever to continually run the program."""
 	connectFailCount = 0	
 	points = 0
-	state = allOff
+	state = config.allOff
 
 	while True:
 		thisTime = time.time()						# record time when entering loop
@@ -83,7 +92,7 @@ def MainLoop():
 				points = calcPoints(int(callsWaiting), timeSeconds)
 				connectFailCount = 0
 
-			connectionFailure = connectFailCount * delayTime >= maxDisconnectTime
+			connectionFailure = connectFailCount * config.delayTime >= config.maxDisconnectTime
 			newState = determineState(points, connectionFailure)
 			if newState != state:
 				state = newState
@@ -94,10 +103,10 @@ def MainLoop():
 			setState(allOff)
 			time.sleep(10)
 		elapsedTime = time.time() - thisTime		# check time elapsed fetching data
-		if elapsedTime > delayTime:					# proceed if fetching took longer than 5 sec
+		if elapsedTime > config.delayTime:					# proceed if fetching took longer than 5 sec
 			pass
 		else:										# otherwise delay the remainder of 5 sec
-			time.sleep(delayTime - elapsedTime)
+			time.sleep(config.delayTime - elapsedTime)
 
 			
 def getBridgeIP():
@@ -152,17 +161,17 @@ def determineState(points, connectionFailure):
 	connection has been lost.
 	"""
 	if connectionFailure:
-		return noConnect
+		return config.noConnect
 	elif points == 0:
-		return white
+		return config.white
 	elif points >= 0 and points < 4:
-		return green
+		return config.green
 	elif points >= 4 and points < 7:
-		return yellow
+		return config.yellow
 	elif points >= 7 and points < 9:
-		return redYellow
+		return config.redYellow
 	elif points >= 9:
-		return red
+		return config.red
 
 		
 def setState(state):
@@ -190,7 +199,7 @@ def getNewLights(IP):
 	Searching continues for 1 minute and is only capable of locating up 
 	to 15 new lights. To add additional lights, the command must be run again.
 	"""
-	connection = requests.post('http://' + IP + '/api/' + userName + '/lights')
+	connection = requests.post('http://' + IP + '/api/' + config.userName + '/lights')
 	if DEBUG: print(connection.text)
 	connection.close()
 	
@@ -208,21 +217,21 @@ def isOperatingHours():
 	
 def resetLights():
 	"""Defines action to be taken to reset the Hue lights."""
-	setState(allOff)
+	setState(config.allOff)
 
 def runProgram():
 	# First try to connect to Hue Bridge automatically. If this fails, attempt
-	# to connect with the manualBridgeIP. Exit if both fail.
+	# to connect with the config.manualBridgeIP. Exit if both fail.
 	IP = getBridgeIP()
 	try:
 		global hue
-		hue = phue.Bridge(ip = IP, username = userName)
+		hue = phue.Bridge(ip=IP, username=config.userName)
 	except:
 		print('Failed to automatically connect to Hue Bridge.')
 		print('Attempting to use manual IP.')
-		IP = manualBridgeIP
+		IP = config.manualBridgeIP
 		try: 
-			hue = phue.Bridge(ip = IP, username = userName)
+			hue = phue.Bridge(ip=IP, username=config.userName)
 		except:
 			print('Manual IP failed. Make sure initial Bridge configuration is complete.')
 			print('Exiting.')
@@ -231,8 +240,8 @@ def runProgram():
 	# Create the Bridge instance, set the lights to allOn, instruct Bridge
 	# to check for new Hue lights, register exit action (turns off lights) 
 	# and run the main loop.
-	hue = phue.Bridge(ip = IP, username = userName)
-	setState(allOn)
+	hue = phue.Bridge(ip = IP, username = config.userName)
+	setState(config.allOn)
 	getNewLights(IP)
 	atexit.register(resetLights)
 	MainLoop()
