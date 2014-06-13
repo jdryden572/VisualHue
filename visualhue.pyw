@@ -99,7 +99,7 @@ def MainLoop():
 #				fileWrite(points)	#out for now
 		else:
 			if DEBUG: print('Not during office hours. Lights off.')
-			setState(config.allOff)
+			setState(allOff)
 			time.sleep(10)
 		elapsedTime = time.time() - thisTime		# check time elapsed fetching data
 		if elapsedTime > config.delayTime:					# proceed if fetching took longer than 5 sec
@@ -209,7 +209,7 @@ def isOperatingHours():
 	Returns boolean True or False.
 	"""
 	isWeekday 		= (0 <= time.localtime()[6] <=  4)	# checks if today is a weekday
-	isOfficeHours 	= (9 <= time.localtime()[3] <= 17)	# checks if currently during office hours
+	isOfficeHours 	= (7 <= time.localtime()[3] <= 17)	# checks if currently during office hours
 	return (isWeekday and isOfficeHours)
 
 
