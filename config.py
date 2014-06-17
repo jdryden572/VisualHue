@@ -1,7 +1,7 @@
 '''Configuration file for visualhue.'''
 
 # These variables may be adjusted as desired
-delayTime = 1					# Seconds between polling the phone status
+delayTime = 2					# Seconds between polling the phone status
 maxDisconnectTime = 15			# Disconnected time before triggering "noConnect"
 
 # Change "manualBridgeIP" if Hue bridge IP is known but cannot be found 

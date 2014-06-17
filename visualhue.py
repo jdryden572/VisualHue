@@ -78,29 +78,34 @@ def MainLoop():
 	connectFailCount = 0	
 	points = 0
 	state = config.allOff
+	standby = True
 
 	while True:
 		thisTime = time.time()						# record time when entering loop
-		if isOperatingHours():	
-			[newCallsWaiting, newTimeSeconds, connectFail] = getPhoneData(pageURL)
-			if connectFail:
-				connectFailCount += 1
-			else:
-				callsWaiting = newCallsWaiting
-				timeSeconds = newTimeSeconds
-				points = calcPoints(int(callsWaiting), timeSeconds)
-				connectFailCount = 0
-
-			connectionFailure = connectFailCount * config.delayTime >= config.maxDisconnectTime
-			newState = determineState(points, connectionFailure)
-			if newState != state:
-				state = newState
-				setState(state)
-#				fileWrite(points)	#out for now
-		else:
+		if not isOperatingHours():
 			if DEBUG: print('Not during office hours. Lights off.')
 			setState(config.allOff)
 			time.sleep(10)
+			standby = True
+			continue
+		if standby:
+			setState(config.allOn)
+			standby = False
+		[newCallsWaiting, newTimeSeconds, connectFail] = getPhoneData(pageURL)
+		if connectFail:
+			connectFailCount += 1
+		else:
+			callsWaiting = newCallsWaiting
+			timeSeconds = newTimeSeconds
+			points = calcPoints(int(callsWaiting), timeSeconds)
+			connectFailCount = 0
+		connectionFailure = connectFailCount * config.delayTime >= config.maxDisconnectTime
+		newState = determineState(points, connectionFailure)
+		if newState != state:
+			state = newState
+			setState(state)
+#			fileWrite(points)	#out for now
+		
 		elapsedTime = time.time() - thisTime		# check time elapsed fetching data
 		if elapsedTime > config.delayTime:					# proceed if fetching took longer than 5 sec
 			pass
@@ -208,40 +213,41 @@ def isOperatingHours():
 	
 	Returns boolean True or False.
 	"""
-	isWeekday 		= (0 <= time.localtime()[6] <=  4)	# checks if today is a weekday
-	isOfficeHours 	= (9 <= time.localtime()[3] <= 17)	# checks if currently during office hours
-	return (isWeekday and isOfficeHours)
+	isWeekday 	= (0  <= time.localtime()[6] <  5)	# checks if today is a weekday
+	is7to7		= (7  <= time.localtime()[3] < 19)	# checks if currently between 7am and 7pm
+	is11to8		= (11 <= time.localtime()[3] < 21)	# checks if currently between 11am and 8pm
+	return (isWeekday and is7to7) or (not isWeekday and is11to8)
 
+def getHue():
+	# First try to connect to Hue Bridge automatically. If this fails, attempt
+	# to connect with the config.manualBridgeIP. Exit if both fail.
+	IP = getBridgeIP()
+	try:
+		Hue = phue.Bridge(ip=IP, username=config.userName)
+	except:
+		print('Failed to automatically connect to Hue Bridge.')
+		print('Attempting to use manual IP.')
+		IP = config.manualBridgeIP
+		try: 
+			Hue = phue.Bridge(ip=IP, username=config.userName)
+		except:
+			print('Manual IP failed. Make sure initial Bridge configuration is complete.')
+			print('Exiting.')
+			exit()
 
+	return Hue
 	
 def resetLights():
 	"""Defines action to be taken to reset the Hue lights."""
 	setState(config.allOff)
 
 def runProgram():
-	# First try to connect to Hue Bridge automatically. If this fails, attempt
-	# to connect with the config.manualBridgeIP. Exit if both fail.
-	IP = getBridgeIP()
-	try:
-		global hue
-		hue = phue.Bridge(ip=IP, username=config.userName)
-	except:
-		print('Failed to automatically connect to Hue Bridge.')
-		print('Attempting to use manual IP.')
-		IP = config.manualBridgeIP
-		try: 
-			hue = phue.Bridge(ip=IP, username=config.userName)
-		except:
-			print('Manual IP failed. Make sure initial Bridge configuration is complete.')
-			print('Exiting.')
-			exit()
-	
-	# Create the Bridge instance, set the lights to allOn, instruct Bridge
-	# to check for new Hue lights, register exit action (turns off lights) 
-	# and run the main loop.
-	hue = phue.Bridge(ip = IP, username = config.userName)
-	setState(config.allOn)
-	getNewLights(IP)
+	"""Create the Bridge instance, set the lights to allOn, instruct Bridge
+	to check for new Hue lights, register exit action (turns off lights) 
+	and run the main loop."""
+	global hue
+	hue = getHue()
+	getNewLights(IP=getBridgeIP())
 	atexit.register(resetLights)
 	MainLoop()
 	
